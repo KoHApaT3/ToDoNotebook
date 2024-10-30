@@ -3,6 +3,8 @@ import "./SidePanel.css";
 
 export default function SidePanel() {
   return (
-    <aside>aside</aside>
+    <div className="SidePanel">
+      popa
+    </div>
   )
 }

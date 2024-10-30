@@ -1,4 +1,3 @@
-
 import './App.css';
 import SidePanel from './components/Sidepanel/SidePanel';
 
