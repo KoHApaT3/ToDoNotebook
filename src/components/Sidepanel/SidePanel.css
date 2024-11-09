@@ -1,6 +1,20 @@
 .SidePanel {
-  width: 20%;
+  width: 30%;
   height: 100%;
   border: 1px solid red;
+  display: flex;
+  justify-content: center;
 }
-
+.NewNote {
+  width: 80%;
+  height: 5%;
+  background-color: gray;
+  color: white;
+}
+.Search {
+  height: 4%;
+  width: 90%;
+}
+.Content {
+  
+}
