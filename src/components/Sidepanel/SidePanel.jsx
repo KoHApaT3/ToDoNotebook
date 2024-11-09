@@ -13,16 +13,24 @@ export default function SidePanel() {
   },[])
 
   useEffect(() => {
-    localStorage.setItem('notes',JSON.stringify(notes))
+    if (notes.length > 0) {
+      localStorage.setItem('notes',JSON.stringify(notes))
+    }
   },[notes])
 
   const InputChange = (e) => {
     setInputValue(e.target.value)
   }
   
+  const DeleteButton = (id) => {
+    setNotes(notes => notes.filter((_,idx)=>idx !== id))
+  }
+
   const ButtonClick = () => {
-    setNotes([...notes,inputValue]) 
-    setInputValue('')
+    if (inputValue.trim() !== '') {
+      setNotes([...notes,inputValue]) 
+      setInputValue('')
+    }
   }
   return (
     <div className="SidePanel">
@@ -33,6 +41,7 @@ export default function SidePanel() {
             {notes.map ((note,id) =>(
               <div key={id} className="NoteItem">
                 {note}
+                <button className='DeleteButton' onClick={() => DeleteButton (id)}>d</button>
               </div>
             ))}
           </div>
