@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:native_pdf_renderer/native_pdf_renderer.dart';
+import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
 
 
 void main() {
@@ -61,10 +64,37 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: _index == 0
           ? FloatingActionButton.extended(
               onPressed: () async {
-                await context.read<LibraryModel>().addBookFromPicker(context);
+                final choice = await showModalBottomSheet<String>(
+                  context: context,
+                  showDragHandle: true,
+                  builder: (ctx) => SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.description_outlined),
+                          title: const Text('Добавить TXT'),
+                          onTap: () => Navigator.pop(ctx, 'txt'),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.picture_as_pdf_outlined),
+                          title: const Text('Импортировать PDF (OCR)'),
+                          onTap: () => Navigator.pop(ctx, 'pdf'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+                if (!context.mounted || choice == null) return;
+                final lib = context.read<LibraryModel>();
+                if (choice == 'txt') {
+                  await lib.addBookFromPicker(context);
+                } else if (choice == 'pdf') {
+                  await lib.addPdfFromPicker(context);
+                }
               },
               icon: const Icon(Icons.add),
-              label: const Text('Добавить книгу'),
+              label: const Text('Добавить'),
             )
           : null,
     );
@@ -401,6 +431,56 @@ class LibraryModel extends ChangeNotifier {
     notifyListeners();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Книга "$title" добавлена')));
+  }
+
+  Future<void> addPdfFromPicker(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
+    if (result == null || result.files.single.path == null) return;
+    final pdfPath = result.files.single.path!;
+    final title = p.basenameWithoutExtension(pdfPath);
+
+    // Render and OCR
+    final doc = await PdfDocument.openFile(pdfPath);
+    final buffer = StringBuffer();
+    try {
+      for (int i = 1; i <= doc.pagesCount; i++) {
+        final page = await doc.getPage(i);
+        try {
+          final pageImage = await page.render(width: page.width, height: page.height, format: PdfPageFormat.PNG);
+          if (pageImage != null) {
+            final tmp = await _persistTempPng(pageImage.bytes, suffix: '_p$i');
+            final text = await FlutterTesseractOcr.extractText(tmp.path, language: 'eng+rus');
+            buffer.writeln(text);
+            await tmp.delete();
+          }
+        } finally {
+          await page.close();
+        }
+      }
+    } finally {
+      await doc.close();
+    }
+
+    final content = buffer.toString();
+    await _db.transaction((txn) async {
+      final id = await txn.rawInsert(
+          'INSERT INTO books (title, author, content, created_at) VALUES (?, ?, ?, datetime("now"))',
+          [title, null, content]);
+      await txn.rawInsert(
+          'INSERT INTO reading_progress (book_id, line_index, updated_at) VALUES (?, 0, datetime("now"))',
+          [id]);
+    });
+    await refresh();
+    notifyListeners();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('PDF "$title" импортирован')));
+  }
+
+  Future<File> _persistTempPng(List<int> bytes, {String suffix = ''}) async {
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, 'booklib_${DateTime.now().millisecondsSinceEpoch}$suffix.png'));
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
   }
 
   Future<void> removeBook(int id) async {
